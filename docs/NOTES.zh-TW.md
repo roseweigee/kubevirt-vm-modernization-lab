@@ -40,6 +40,28 @@ KubeVirt 是 OpenShift Virtualization 的上游開源專案；CDI（Containerize
 
 **NetworkPolicy 為什麼切換後還有效？** Policy 選的是 `app=legacy-app`，VM 和容器版本都有這個 label，所以不管流量在哪一邊，other 都被擋。
 
+### 實測結果（GitHub Actions，KubeVirt v1.10.0、CDI v1.66.1，kind，KVM 硬體加速）
+
+| 檢查 | 結果 |
+|---|---|
+| Step 1 DataVolume 匯入 | Succeeded |
+| Step 2 VM 開機並 Ready | Running、Ready |
+| Step 3 frontend、other 經 Service 連到 VM | 都拿到「running in a VM (boot #1)」 |
+| Step 4 NetworkPolicy | other 被擋；frontend 照常 |
+| Step 5 關機 → 連不到；開機 → 計數變 boot #2 | 通過 |
+| Step 6 切到容器 | 拿到「running in a container」；other 照樣被擋 |
+| Step 7 切回 VM | 回到「boot #2」 |
+| 合計 | **12/12 通過**，整個流程約 6 分鐘 |
+
+### 這次實際踩到的 4 個坑（面試很好講）
+
+| 問題 | 原因 | 解法 |
+|---|---|---|
+| 安裝 KubeVirt 時 `kubectl apply` 失敗：annotation 超過 262144 bytes | KubeVirt 的 CRD 太大，client-side apply 會把整份內容塞進 `last-applied-configuration` annotation | 改用 `kubectl apply --server-side` |
+| 剛裝好就建 VM，webhook `virt-api` connection refused | Operator 回報 Available 時，virt-api 不一定已經能接請求 | 等 virt-api、virt-controller、virt-handler rollout 完成，再加上重試 |
+| DataVolume 一直不匯入：`no accessMode specified in StorageProfile` | CDI 不認識 kind 的 local-path StorageClass，不知道要用什麼 access mode | 在 DataVolume 寫明 `accessModes: [ReadWriteOnce]`、`volumeMode: Filesystem`（正式環境則是設定 StorageProfile） |
+| 第一次開機正常，關機再開機後服務連不到 | KubeVirt 預設每次開機給 VM 新的隨機 MAC；Ubuntu 第一次開機時 cloud-init 把網路設定綁在舊 MAC 上，網卡沒被設定起來 | 在 VM 的 interface 固定 `macAddress`。從 VMware 遷移時也要注意這點：有些系統的授權或網路設定是綁 MAC 的 |
+
 ---
 
 ## B. Developer Sandbox 實際操作（OpenShift Virtualization）
