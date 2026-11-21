@@ -41,6 +41,9 @@ spec:
           interfaces:
             - name: default
               masquerade: {}
+              # fixed MAC: cloud-init writes the guest's network config for this MAC on
+              # first boot; a new random MAC on restart would leave the NIC unconfigured
+              macAddress: "02:6b:76:00:00:01"
               ports:
                 - port: 8080
       networks:
