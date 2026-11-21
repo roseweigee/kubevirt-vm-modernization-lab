@@ -5,7 +5,9 @@ source "$(dirname "$0")/lib.sh"
 
 say "Deploy namespace, VM, Service and clients"
 kubectl apply -f "$M/00-namespace.yaml"
-kubectl apply -f "$M/10-legacy-vm.yaml"
+# the KubeVirt/CDI admission webhooks can need a few more seconds after install
+for i in $(seq 1 20); do kubectl apply -f "$M/10-legacy-vm.yaml" && break; echo "  webhook not ready yet, retry $i"; sleep 10; done
+kubectl -n "$NS" get vm legacy-app >/dev/null
 kubectl apply -f "$M/20-service-and-clients.yaml"
 kubectl -n "$NS" rollout status deploy/frontend --timeout=180s
 kubectl -n "$NS" rollout status deploy/other --timeout=180s

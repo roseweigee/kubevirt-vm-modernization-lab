@@ -24,12 +24,17 @@ else
   echo "  /dev/kvm available → hardware-accelerated VMs"
 fi
 kubectl -n kubevirt wait kubevirt kubevirt --for=condition=Available --timeout=15m
+kubectl -n kubevirt rollout status deploy/virt-api --timeout=5m
+kubectl -n kubevirt rollout status deploy/virt-controller --timeout=5m
+kubectl -n kubevirt rollout status ds/virt-handler --timeout=5m
 
 say "2/3 CDI operator + CR"
 kubectl apply --server-side --force-conflicts -f "https://github.com/kubevirt/containerized-data-importer/releases/download/$CDI_VERSION/cdi-operator.yaml"
 kubectl wait crd cdis.cdi.kubevirt.io --for=condition=Established --timeout=120s
 kubectl apply --server-side --force-conflicts -f "https://github.com/kubevirt/containerized-data-importer/releases/download/$CDI_VERSION/cdi-cr.yaml"
 kubectl wait cdi cdi --for=condition=Available --timeout=15m
+kubectl -n cdi rollout status deploy/cdi-apiserver --timeout=5m
+kubectl -n cdi rollout status deploy/cdi-deployment --timeout=5m
 
 say "3/3 virtctl CLI"
 if ! command -v virtctl >/dev/null; then
