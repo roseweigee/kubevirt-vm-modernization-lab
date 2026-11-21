@@ -9,8 +9,10 @@ CDI_VERSION="${CDI_VERSION:-$(basename "$(curl -fsSLo /dev/null -w '%{url_effect
 echo "KubeVirt $KV_VERSION · CDI $CDI_VERSION"
 
 say "1/3 KubeVirt operator + CR"
-kubectl apply -f "https://github.com/kubevirt/kubevirt/releases/download/$KV_VERSION/kubevirt-operator.yaml"
-kubectl apply -f "https://github.com/kubevirt/kubevirt/releases/download/$KV_VERSION/kubevirt-cr.yaml"
+# server-side apply: the KubeVirt CRD is too large for client-side apply's annotation
+kubectl apply --server-side --force-conflicts -f "https://github.com/kubevirt/kubevirt/releases/download/$KV_VERSION/kubevirt-operator.yaml"
+kubectl wait crd kubevirts.kubevirt.io --for=condition=Established --timeout=120s
+kubectl apply --server-side --force-conflicts -f "https://github.com/kubevirt/kubevirt/releases/download/$KV_VERSION/kubevirt-cr.yaml"
 
 # Hardware virtualization check: without /dev/kvm on the node, fall back to software emulation
 NODE_CONTAINER="${NODE_CONTAINER:-}"
@@ -24,8 +26,9 @@ fi
 kubectl -n kubevirt wait kubevirt kubevirt --for=condition=Available --timeout=15m
 
 say "2/3 CDI operator + CR"
-kubectl apply -f "https://github.com/kubevirt/containerized-data-importer/releases/download/$CDI_VERSION/cdi-operator.yaml"
-kubectl apply -f "https://github.com/kubevirt/containerized-data-importer/releases/download/$CDI_VERSION/cdi-cr.yaml"
+kubectl apply --server-side --force-conflicts -f "https://github.com/kubevirt/containerized-data-importer/releases/download/$CDI_VERSION/cdi-operator.yaml"
+kubectl wait crd cdis.cdi.kubevirt.io --for=condition=Established --timeout=120s
+kubectl apply --server-side --force-conflicts -f "https://github.com/kubevirt/containerized-data-importer/releases/download/$CDI_VERSION/cdi-cr.yaml"
 kubectl wait cdi cdi --for=condition=Available --timeout=15m
 
 say "3/3 virtctl CLI"
