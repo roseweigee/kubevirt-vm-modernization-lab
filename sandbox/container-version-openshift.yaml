@@ -1,0 +1,42 @@
+# Modernized version of the same app, as a container, for the Developer Sandbox.
+# Apply, then switch the Service:
+#   oc patch service legacy-app --type=merge -p '{"spec":{"selector":{"app":"legacy-app","tier":"container"}}}'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: legacy-app-web
+data:
+  index.html: |
+    legacy-app running in a container on OpenShift
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-app-container
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: legacy-app, tier: container}
+  template:
+    metadata:
+      labels: {app: legacy-app, tier: container}
+    spec:
+      containers:
+        - name: web
+          image: registry.access.redhat.com/ubi9/python-312:latest
+          command: ["python3", "-m", "http.server", "8080", "--directory", "/srv/www"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /, port: 8080}
+            periodSeconds: 3
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          volumeMounts:
+            - name: web
+              mountPath: /srv/www
+      volumes:
+        - name: web
+          configMap:
+            name: legacy-app-web

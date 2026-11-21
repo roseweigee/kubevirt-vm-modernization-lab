@@ -1,0 +1,21 @@
+# Step 4: isolate the VM with a plain Kubernetes NetworkPolicy.
+# A VM runs inside a virt-launcher pod that carries the VM template's labels,
+# so the same policy objects used for containers apply to VMs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: legacy-app-allow-frontend
+  namespace: vm-lab
+spec:
+  podSelector:
+    matchLabels:
+      app: legacy-app
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              role: frontend
+      ports:
+        - protocol: TCP
+          port: 8080

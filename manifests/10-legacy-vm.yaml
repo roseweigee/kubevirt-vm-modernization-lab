@@ -1,0 +1,94 @@
+# Step 1–2: a "legacy" application that still lives in a VM.
+#
+# dataVolumeTemplates -> CDI imports a ready-made qcow2 disk image over HTTP into a PVC.
+# This is the same mechanism a lift-and-shift migration relies on: the VM's disk
+# arrives as an image and lands on Kubernetes storage, then KubeVirt boots it.
+#
+# cloud-init installs a tiny web app as a systemd service. Every boot it bumps a
+# counter stored on the VM's own disk, so a stop/start shows whether data survived.
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: legacy-app
+  namespace: vm-lab
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: legacy-app-rootdisk
+      spec:
+        source:
+          http:
+            url: https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img
+        storage:
+          resources:
+            requests:
+              storage: 6Gi
+  template:
+    metadata:
+      labels:
+        app: legacy-app      # the Service selects on this
+        tier: vm
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        memory:
+          guest: 1Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk: {bus: virtio}
+            - name: cloudinit
+              disk: {bus: virtio}
+          interfaces:
+            - name: default
+              masquerade: {}
+              ports:
+                - port: 8080
+      networks:
+        - name: default
+          pod: {}
+      # KubeVirt runs this probe against the guest: the VM only counts as Ready
+      # once the app inside it answers on :8080
+      readinessProbe:
+        httpGet:
+          port: 8080
+        initialDelaySeconds: 20
+        periodSeconds: 5
+        failureThreshold: 60
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: legacy-app-rootdisk
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              user: ubuntu
+              password: kubevirt-lab
+              chpasswd: {expire: false}
+              ssh_pwauth: false
+              write_files:
+                - path: /usr/local/bin/legacy-app.sh
+                  permissions: "0755"
+                  content: |
+                    #!/bin/bash
+                    mkdir -p /var/lib/legacy /srv/www
+                    n=$(( $(cat /var/lib/legacy/bootcount 2>/dev/null || echo 0) + 1 ))
+                    echo "$n" > /var/lib/legacy/bootcount
+                    echo "legacy-app running in a VM (boot #$n)" > /srv/www/index.html
+                    exec python3 -m http.server 8080 --directory /srv/www
+                - path: /etc/systemd/system/legacy-app.service
+                  content: |
+                    [Unit]
+                    Description=Legacy app (lab)
+                    After=network-online.target
+                    [Service]
+                    ExecStart=/usr/local/bin/legacy-app.sh
+                    Restart=on-failure
+                    [Install]
+                    WantedBy=multi-user.target
+              runcmd:
+                - systemctl daemon-reload
+                - systemctl enable --now legacy-app.service

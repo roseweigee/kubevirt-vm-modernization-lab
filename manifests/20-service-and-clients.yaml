@@ -1,0 +1,51 @@
+# Step 3: the VM is reached exactly like a pod – through a normal Service.
+# Two client pods: "frontend" will be allowed by NetworkPolicy, "other" will not.
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-app
+  namespace: vm-lab
+spec:
+  selector:
+    app: legacy-app
+    tier: vm
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: vm-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {role: frontend}
+  template:
+    metadata:
+      labels: {role: frontend}
+    spec:
+      containers:
+        - name: curl
+          image: curlimages/curl:8.10.1
+          command: ["sleep", "infinity"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: other
+  namespace: vm-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {role: other}
+  template:
+    metadata:
+      labels: {role: other}
+    spec:
+      containers:
+        - name: curl
+          image: curlimages/curl:8.10.1
+          command: ["sleep", "infinity"]

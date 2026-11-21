@@ -1,0 +1,52 @@
+name: lab
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  kubevirt-on-kind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint manifests (kubeconform, strict, KubeVirt CRD schemas)
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          ./kubeconform -strict -summary -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            manifests/
+
+      - name: Expose /dev/kvm to the runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm || echo "no /dev/kvm on this runner"
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          version: v0.30.0
+          cluster_name: kubevirt-lab
+
+      - name: Install KubeVirt + CDI + virtctl
+        env:
+          NODE_CONTAINER: kubevirt-lab-control-plane
+        run: bash scripts/install-kubevirt.sh
+
+      - name: Verify every lab step
+        run: bash scripts/verify.sh
+
+      - name: Debug on failure
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl -n vm-lab get vm,vmi,dv,pvc -o yaml
+          kubectl -n vm-lab describe vmi legacy-app || true
+          kubectl -n vm-lab logs -l kubevirt.io=virt-launcher --all-containers --tail=100 || true
+          kubectl -n vm-lab logs -l app=containerized-data-importer --tail=100 || true
+          kubectl get events -n vm-lab --sort-by=.lastTimestamp | tail -50

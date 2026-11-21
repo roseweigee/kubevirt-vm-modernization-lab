@@ -1,0 +1,44 @@
+# Step 6: modernize – the same app rebuilt as a container.
+# It carries app=legacy-app (so the NetworkPolicy still covers it) but tier=container,
+# so it receives no traffic until the Service selector is switched.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: legacy-app-web
+  namespace: vm-lab
+data:
+  index.html: |
+    legacy-app running in a container
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-app-container
+  namespace: vm-lab
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: legacy-app, tier: container}
+  template:
+    metadata:
+      labels: {app: legacy-app, tier: container}
+    spec:
+      containers:
+        - name: web
+          image: python:3.12-slim
+          command: ["python3", "-m", "http.server", "8080", "--directory", "/srv/www"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /, port: 8080}
+            periodSeconds: 3
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          volumeMounts:
+            - name: web
+              mountPath: /srv/www
+      volumes:
+        - name: web
+          configMap:
+            name: legacy-app-web
