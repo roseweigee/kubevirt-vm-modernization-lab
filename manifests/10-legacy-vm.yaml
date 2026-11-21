@@ -21,6 +21,10 @@ spec:
           http:
             url: https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img
         storage:
+          # kind's local-path StorageClass has no CDI StorageProfile defaults,
+          # so state the access/volume mode explicitly
+          accessModes: ["ReadWriteOnce"]
+          volumeMode: Filesystem
           resources:
             requests:
               storage: 6Gi
