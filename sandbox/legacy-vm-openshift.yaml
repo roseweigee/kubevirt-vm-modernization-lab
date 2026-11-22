@@ -36,7 +36,7 @@ spec:
           disks:
             - name: rootdisk
               disk: {bus: virtio}
-            - name: cloudinit
+            - name: cloudinitdisk
               disk: {bus: virtio}
           interfaces:
             - name: default
@@ -59,7 +59,7 @@ spec:
         - name: rootdisk
           dataVolume:
             name: legacy-app-rootdisk
-        - name: cloudinit
+        - name: cloudinitdisk
           cloudInitNoCloud:
             userData: |
               #cloud-config
